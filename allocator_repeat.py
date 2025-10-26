@@ -2,7 +2,7 @@
 import json
 import os
 from datetime import datetime
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Tuple
 from dotenv import load_dotenv
 from openai import OpenAI
 
@@ -14,6 +14,10 @@ class DeliveryAllocator:
         self.client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
         self.drivers = []
         self.orders = []
+        self.attempts_dir = './data/attempts'
+        
+        # Create attempts directory if it doesn't exist
+        os.makedirs(self.attempts_dir, exist_ok=True)
         
     def load_data(self, drivers_file: str, orders_file: str):
         """Load driver and order data from JSON files"""
@@ -347,8 +351,87 @@ Focus on fixing the validation issues above. Only return the JSON, no additional
 """
         return prompt
     
-    def allocate_with_ai(self, max_retries: int = 5) -> Dict[str, Any]:
-        """Use GPT-4 to create allocation plan with retry logic"""
+    def categorize_validation_issues(self, issues: List[str]) -> Dict[str, int]:
+        """Categorize and count validation issues"""
+        categories = {
+            'time_conflicts': 0,
+            'capability_mismatches': 0,
+            'capacity_violations': 0,
+            'resource_waste': 0,
+            'region_mismatches': 0,
+            'other': 0
+        }
+        
+        for issue in issues:
+            if 'TIME CONFLICT' in issue:
+                categories['time_conflicts'] += 1
+            elif 'lacks' in issue and 'capability' in issue:
+                categories['capability_mismatches'] += 1
+            elif 'CAPACITY' in issue:
+                categories['capacity_violations'] += 1
+            elif 'RESOURCE WASTE' in issue:
+                categories['resource_waste'] += 1
+            elif 'REGION' in issue:
+                categories['region_mismatches'] += 1
+            else:
+                categories['other'] += 1
+        
+        return categories
+    
+    def calculate_attempt_score(self, validation_issues: List[str]) -> Tuple[int, Dict[str, int]]:
+        """
+        Calculate a score for an attempt. Lower is better.
+        Returns (score, issue_breakdown)
+        
+        Scoring:
+        - Time conflicts: 1000 points each (absolutely critical)
+        - Capability mismatches: 1000 points each (absolutely critical)
+        - Capacity violations: 500 points each (very important)
+        - Resource waste: 100 points each (important)
+        - Region mismatches: 10 points each (nice to have)
+        """
+        categories = self.categorize_validation_issues(validation_issues)
+        
+        score = (
+            categories['time_conflicts'] * 1000 +
+            categories['capability_mismatches'] * 1000 +
+            categories['capacity_violations'] * 500 +
+            categories['resource_waste'] * 100 +
+            categories['region_mismatches'] * 10 +
+            categories['other'] * 50
+        )
+        
+        return score, categories
+    
+    def save_attempt(self, attempt_num: int, allocation: Dict[str, Any], 
+                    validation_issues: List[str], score: int, 
+                    issue_breakdown: Dict[str, int]):
+        """Save an allocation attempt to file"""
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f'attempt_{attempt_num:02d}_{timestamp}_score_{score}.json'
+        filepath = os.path.join(self.attempts_dir, filename)
+        
+        attempt_data = {
+            'attempt_number': attempt_num,
+            'timestamp': timestamp,
+            'score': score,
+            'issue_breakdown': issue_breakdown,
+            'total_issues': len(validation_issues),
+            'validation_issues': validation_issues,
+            'allocation': allocation
+        }
+        
+        with open(filepath, 'w') as f:
+            json.dump(attempt_data, f, indent=2)
+        
+        print(f"   💾 Saved attempt {attempt_num} to {filename}")
+        return filepath
+    
+    def allocate_with_ai(self, max_retries: int = 5) -> Tuple[Dict[str, Any], str]:
+        """
+        Use GPT-4 to create allocation plan with retry logic.
+        Returns the best attempt (with fewest critical issues) and its filepath.
+        """
         print("\n🤖 Analyzing orders and drivers...")
         
         order_analysis = self.preprocess_orders()
@@ -364,6 +447,9 @@ Focus on fixing the validation issues above. Only return the JSON, no additional
         print(f"   Total Capacity: {driver_analysis['total_capacity']} orders/day")
         print(f"   Orders by Region: {dict(sorted({k: len(v) for k, v in order_analysis['orders_by_region'].items()}.items()))}")
         
+        # Track all attempts
+        all_attempts = []
+        
         # First attempt
         prompt = self.create_allocation_prompt(order_analysis, driver_analysis)
         
@@ -376,30 +462,36 @@ Focus on fixing the validation issues above. Only return the JSON, no additional
                     {"role": "system", "content": "You are an expert logistics optimizer. Always respond with valid JSON only."},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.1,
+                temperature=0.3,
                 response_format={"type": "json_object"}
             )
             
             allocation_result = json.loads(response.choices[0].message.content)
+            validation_issues = self.validate_allocation(allocation_result)
+            score, issue_breakdown = self.calculate_attempt_score(validation_issues)
             
-            # Validate and retry if needed
+            filepath = self.save_attempt(1, allocation_result, validation_issues, score, issue_breakdown)
+            all_attempts.append({
+                'attempt_num': 1,
+                'allocation': allocation_result,
+                'validation_issues': validation_issues,
+                'score': score,
+                'issue_breakdown': issue_breakdown,
+                'filepath': filepath
+            })
+            
+            print(f"   📊 Score: {score} | Issues: {len(validation_issues)} (TC:{issue_breakdown['time_conflicts']}, CM:{issue_breakdown['capability_mismatches']}, RW:{issue_breakdown['resource_waste']})")
+            
+            # Retry if needed
             for retry_count in range(max_retries):
-                validation_issues = self.validate_allocation(allocation_result)
-                
                 if not validation_issues:
-                    print(f"✅ Allocation successful on attempt {retry_count + 1}")
+                    print(f"✅ Perfect allocation found on attempt {retry_count + 1}")
                     break
                 
                 print(f"\n⚠️  Found {len(validation_issues)} validation issue(s) on attempt {retry_count + 1}")
-                
-                # Show issue breakdown
-                time_conflicts = len([i for i in validation_issues if 'TIME CONFLICT' in i])
-                capability_issues = len([i for i in validation_issues if 'lacks' in i and 'capability' in i])
-                resource_waste = len([i for i in validation_issues if 'wedding-capable driver wasted' in i])
-                
-                print(f"   - Time conflicts: {time_conflicts}")
-                print(f"   - Capability mismatches: {capability_issues}")
-                print(f"   - Resource waste: {resource_waste}")
+                print(f"   - Time conflicts: {issue_breakdown['time_conflicts']}")
+                print(f"   - Capability mismatches: {issue_breakdown['capability_mismatches']}")
+                print(f"   - Resource waste: {issue_breakdown['resource_waste']}")
                 
                 print(f"🔄 Requesting corrections (Attempt {retry_count + 2}/{max_retries + 1})...")
                 
@@ -423,8 +515,45 @@ Focus on fixing the validation issues above. Only return the JSON, no additional
                 )
                 
                 allocation_result = json.loads(response.choices[0].message.content)
+                validation_issues = self.validate_allocation(allocation_result)
+                score, issue_breakdown = self.calculate_attempt_score(validation_issues)
+                
+                filepath = self.save_attempt(retry_count + 2, allocation_result, validation_issues, score, issue_breakdown)
+                all_attempts.append({
+                    'attempt_num': retry_count + 2,
+                    'allocation': allocation_result,
+                    'validation_issues': validation_issues,
+                    'score': score,
+                    'issue_breakdown': issue_breakdown,
+                    'filepath': filepath
+                })
+                
+                print(f"   📊 Score: {score} | Issues: {len(validation_issues)} (TC:{issue_breakdown['time_conflicts']}, CM:{issue_breakdown['capability_mismatches']}, RW:{issue_breakdown['resource_waste']})")
             
-            return allocation_result
+            # Select best attempt (no time conflicts, no capability mismatches, lowest score)
+            print(f"\n🏆 Selecting best attempt from {len(all_attempts)} attempts...")
+            
+            # First, filter to attempts with no time conflicts and no capability mismatches
+            critical_free = [a for a in all_attempts 
+                           if a['issue_breakdown']['time_conflicts'] == 0 
+                           and a['issue_breakdown']['capability_mismatches'] == 0]
+            
+            if critical_free:
+                # Among critical-free attempts, choose the one with lowest score
+                best_attempt = min(critical_free, key=lambda x: x['score'])
+                print(f"   ✅ Found {len(critical_free)} attempt(s) with no critical issues")
+            else:
+                # If no critical-free attempts, choose the one with lowest score overall
+                best_attempt = min(all_attempts, key=lambda x: x['score'])
+                print(f"   ⚠️  No attempts without critical issues. Selecting least problematic.")
+            
+            print(f"   🎯 Best: Attempt {best_attempt['attempt_num']} (Score: {best_attempt['score']}, Issues: {len(best_attempt['validation_issues'])})")
+            print(f"      - Time Conflicts: {best_attempt['issue_breakdown']['time_conflicts']}")
+            print(f"      - Capability Mismatches: {best_attempt['issue_breakdown']['capability_mismatches']}")
+            print(f"      - Resource Waste: {best_attempt['issue_breakdown']['resource_waste']}")
+            print(f"      - Region Mismatches: {best_attempt['issue_breakdown']['region_mismatches']}")
+            
+            return best_attempt['allocation'], best_attempt['filepath']
             
         except Exception as e:
             print(f"❌ Error calling OpenAI API: {e}")
@@ -521,6 +650,75 @@ Focus on fixing the validation issues above. Only return the JSON, no additional
         
         return issues
     
+    def build_complete_output(self, allocation: Dict[str, Any]) -> Dict[str, Any]:
+        """Build complete output with all driver and order metadata"""
+        
+        # Create lookup maps
+        driver_map = {d['driver_id']: d for d in self.drivers}
+        order_map = {o['order_id']: o for o in self.orders}
+        
+        allocations_dict = allocation.get('allocations', {})
+        reasoning_dict = allocation.get('reasoning', {})
+        
+        # Track allocated orders
+        allocated_order_ids = set()
+        for order_ids in allocations_dict.values():
+            allocated_order_ids.update(order_ids)
+        
+        # Build complete driver allocations
+        complete_allocations = {}
+        
+        for driver in self.drivers:
+            driver_id = driver['driver_id']
+            assigned_order_ids = allocations_dict.get(driver_id, [])
+            
+            # Build orders with full metadata and reasoning
+            orders_with_metadata = []
+            for order_id in assigned_order_ids:
+                order_data = order_map.get(order_id, {}).copy()
+                # Add reasoning for this specific order
+                order_data['allocation_reasoning'] = reasoning_dict.get(order_id, "No reasoning provided")
+                orders_with_metadata.append(order_data)
+            
+            complete_allocations[driver_id] = {
+                "driver": driver.copy(),
+                "assigned_orders": orders_with_metadata,
+                "utilization": len(assigned_order_ids) / driver['max_orders_per_day'] if driver['max_orders_per_day'] > 0 else 0
+            }
+        
+        # Build unallocated orders list
+        unallocated_orders = []
+        for order in self.orders:
+            if order['order_id'] not in allocated_order_ids:
+                order_copy = order.copy()
+                order_copy['unallocated_reason'] = "No suitable driver available or allocation constraints not met"
+                unallocated_orders.append(order_copy)
+        
+        # Build unused drivers list
+        unused_drivers = []
+        for driver in self.drivers:
+            if driver['driver_id'] not in allocations_dict or len(allocations_dict[driver['driver_id']]) == 0:
+                unused_drivers.append(driver.copy())
+        
+        # Complete output
+        complete_output = {
+            "allocations": complete_allocations,
+            "unallocated_orders": unallocated_orders,
+            "unused_drivers": unused_drivers,
+            "metrics": allocation.get('metrics', {}),
+            "warnings": allocation.get('warnings', []),
+            "summary": {
+                "total_drivers": len(self.drivers),
+                "drivers_used": len([d for d in allocations_dict.values() if len(d) > 0]),
+                "drivers_unused": len(unused_drivers),
+                "total_orders": len(self.orders),
+                "orders_allocated": len(allocated_order_ids),
+                "orders_unallocated": len(unallocated_orders)
+            }
+        }
+        
+        return complete_output
+    
     def format_output(self, allocation: Dict[str, Any], validation_issues: List[str]):
         """Pretty print allocation results"""
         print("\n" + "="*80)
@@ -546,23 +744,34 @@ Focus on fixing the validation issues above. Only return the JSON, no additional
             print(f"   Wedding Drivers on Wedding Orders: {wedding_on_wedding}")
             print(f"   Wedding Drivers on Regular Orders: {wedding_on_regular}")
         
-        # Count time conflicts from validation
-        time_conflicts = len([i for i in validation_issues if 'TIME CONFLICT' in i])
-        if time_conflicts > 0:
-            print(f"   ⚠️  Time Conflicts Found: {time_conflicts}")
+        # Validation issue breakdown
+        issue_breakdown = self.categorize_validation_issues(validation_issues)
+        if any(issue_breakdown.values()):
+            print(f"\n⚠️  VALIDATION ISSUE BREAKDOWN:")
+            if issue_breakdown['time_conflicts'] > 0:
+                print(f"   ⛔ Time Conflicts: {issue_breakdown['time_conflicts']}")
+            if issue_breakdown['capability_mismatches'] > 0:
+                print(f"   ⛔ Capability Mismatches: {issue_breakdown['capability_mismatches']}")
+            if issue_breakdown['capacity_violations'] > 0:
+                print(f"   ⚠️  Capacity Violations: {issue_breakdown['capacity_violations']}")
+            if issue_breakdown['resource_waste'] > 0:
+                print(f"   ⚠️  Resource Waste: {issue_breakdown['resource_waste']}")
+            if issue_breakdown['region_mismatches'] > 0:
+                print(f"   ℹ️  Region Mismatches: {issue_breakdown['region_mismatches']}")
         
         # Allocations
         allocations = allocation.get('allocations', {})
         reasoning = allocation.get('reasoning', {})
         
-        print(f"\n👥 DRIVER ASSIGNMENTS ({len(allocations)} drivers):")
+        active_drivers = {k: v for k, v in allocations.items() if len(v) > 0}
+        print(f"\n👥 DRIVER ASSIGNMENTS ({len(active_drivers)} drivers with orders):")
         print("-"*80)
         
         # Create driver lookup
         driver_map = {d['driver_id']: d for d in self.drivers}
         order_map = {o['order_id']: o for o in self.orders}
         
-        for driver_id in sorted(allocations.keys()):
+        for driver_id in sorted(active_drivers.keys()):
             driver = driver_map.get(driver_id, {})
             order_ids = allocations[driver_id]
             
@@ -575,7 +784,6 @@ Focus on fixing the validation issues above. Only return the JSON, no additional
             print(f"   Preferred Region: {driver.get('preferred_region', 'N/A')}")
             print(f"   Capacity: {len(order_ids)}/{driver.get('max_orders_per_day', 'N/A')} orders")
             print(f"   Capabilities: {', '.join(capabilities) or 'None'}")
-            print(f"   Reasoning: {reasoning.get(driver_id, 'No reasoning provided')}")
             print(f"   Orders:")
             
             for order_id in sorted(order_ids, key=lambda oid: order_map.get(oid, {}).get('pickup_time', '')):
@@ -596,6 +804,10 @@ Focus on fixing the validation issues above. Only return the JSON, no additional
                 tags_str = ', '.join(tags) or 'none'
                 
                 print(f"      {order_type} {order_id}: {region} {region_match} | {pax} pax | {pickup} → {teardown} | tags: {tags_str}")
+                
+                # Show reasoning for this order
+                order_reasoning = reasoning.get(order_id, "No reasoning provided")
+                print(f"         └─ Reasoning: {order_reasoning}")
         
         # Warnings
         warnings = allocation.get('warnings', [])
@@ -618,9 +830,12 @@ Focus on fixing the validation issues above. Only return the JSON, no additional
     
     def save_results(self, allocation: Dict[str, Any], output_file: str = './data/allocation_results.json'):
         """Save allocation results to file"""
+        # Build complete output with all metadata
+        complete_output = self.build_complete_output(allocation)
+        
         with open(output_file, 'w') as f:
-            json.dump(allocation, f, indent=2)
-        print(f"\n💾 Results saved to {output_file}")
+            json.dump(complete_output, f, indent=2)
+        print(f"\n💾 Final results saved to {output_file}")
 
 
 def main():
@@ -631,16 +846,20 @@ def main():
     allocator.load_data('./data/drivers.json', './data/orders.json')
     
     # Run AI allocation with retry logic (max 5 retries = 6 total attempts)
-    allocation = allocator.allocate_with_ai(max_retries=5)
+    # This will return the best attempt (no time conflicts, no capability mismatches, lowest score)
+    best_allocation, best_attempt_filepath = allocator.allocate_with_ai(max_retries=5)
     
     # Final validation
-    validation_issues = allocator.validate_allocation(allocation)
+    validation_issues = allocator.validate_allocation(best_allocation)
     
     # Display results
-    allocator.format_output(allocation, validation_issues)
+    allocator.format_output(best_allocation, validation_issues)
     
-    # Save results
-    allocator.save_results(allocation)
+    # Save final results
+    allocator.save_results(best_allocation)
+    
+    print(f"\n📁 All attempts saved in: {allocator.attempts_dir}/")
+    print(f"🏆 Best attempt was saved as final result")
 
 
 if __name__ == "__main__":
