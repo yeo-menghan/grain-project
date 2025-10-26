@@ -216,26 +216,20 @@ Return your allocation as a valid JSON object with this exact structure:
     "DRV-002": ["P9764"]
   }},
   "reasoning": {{
-    "DRV-001": "North region specialist. Assigned Q3370 (north, pickup 02:00) and Q3371 (north, pickup 19:30) - no time overlap. Both are regular orders matching preferred region.",
-    "DRV-002": "West region, has corporate/seminar capabilities. Assigned P9764 (east region, pickup 00:15) - only corporate-capable driver available in time slot."
+    "Q3370": "Assigned to DRV-001 (north region specialist). Order is in north region (matching preferred region). No time conflicts with other orders. Driver has wedding capability for this wedding order.",
+    "Q3371": "Assigned to DRV-001 (north region specialist). Order is in north region (matching preferred region). Pickup at 19:30 does not conflict with Q3370 which ends at 06:00. Regular order, driver has capacity.",
+    "P9764": "Assigned to DRV-002 (west region, corporate capable). Only corporate-capable driver available in this time slot. Order is in east region (not matching) but no west region corporate drivers available."
   }},
   "warnings": [
     "DRV-008 assigned 6 orders (at max capacity of 6)",
     "Order Q9999 UNALLOCATED - no available wedding-capable drivers in time window"
-  ],
-  "metrics": {{
-    "total_allocated": 58,
-    "total_unallocated": 2,
-    "wedding_orders_allocated": 15,
-    "corporate_orders_allocated": 10,
-    "regular_orders_allocated": 33,
-    "drivers_used": 25,
-    "average_orders_per_driver": 2.3,
-    "region_match_rate": 0.85,
-    "wedding_drivers_on_wedding_orders": 12,
-    "wedding_drivers_on_regular_orders": 3
-  }}
+  ]
 }}
+
+IMPORTANT NOTES:
+- The "reasoning" field should have ONE ENTRY PER ORDER (not per driver)
+- Each order's reasoning should explain WHY that specific order was assigned to that specific driver
+- Include information about: region matching, capability requirements, time conflicts checked, alternative options considered
 
 DOUBLE-CHECK BEFORE RESPONDING:
 1. ✓ Every wedding/VIP/large event order is assigned to a wedding-capable driver
@@ -246,6 +240,7 @@ DOUBLE-CHECK BEFORE RESPONDING:
 6. ✓ Regular orders are handled by standard/corporate drivers when possible
 7. ✓ Region matches are maximized (aim for >90% match rate)
 8. ✓ All driver IDs and order IDs in your response exactly match the input data
+9. ✓ Reasoning is provided for EVERY allocated order (not every driver)
 
 IMPORTANT: 
 - TIME CONFLICTS are the #1 issue to avoid - check carefully
@@ -253,6 +248,7 @@ IMPORTANT:
 - Prefer region matching - only assign to different regions if necessary
 - Only return the JSON, no additional text
 - If an order cannot be allocated due to constraints, include it in warnings with specific reason
+- Provide reasoning for EACH ORDER explaining the assignment decision
 """
         return prompt
     
@@ -267,7 +263,7 @@ IMPORTANT:
         capability_issues = [i for i in validation_issues if 'lacks' in i and 'capability' in i]
         capacity_issues = [i for i in validation_issues if 'assigned' in i and 'max is' in i]
         region_issues = [i for i in validation_issues if 'region matching' in i]
-        resource_waste = [i for i in validation_issues if 'wedding-capable driver wasted' in i]
+        resource_waste = [i for i in validation_issues if 'wedding-capable driver wasted' in i or 'RESOURCE WASTE' in i]
         
         prompt = f"""Your previous allocation attempt had {len(validation_issues)} validation issue(s). Please fix them and provide a corrected allocation.
 
@@ -338,14 +334,14 @@ RESPONSE FORMAT:
 Return a corrected allocation in the same JSON format:
 {{
   "allocations": {{ ... }},
-  "reasoning": {{ ... }},
-  "warnings": [ ... ],
-  "metrics": {{
-    ...,
-    "wedding_drivers_on_wedding_orders": X,
-    "wedding_drivers_on_regular_orders": Y
-  }}
+  "reasoning": {{ 
+    "ORDER_ID": "Explanation for why this order was assigned to this driver",
+    ...
+  }},
+  "warnings": [ ... ]
 }}
+
+REMEMBER: Provide reasoning for EACH ORDER (not each driver). Each order should have one reasoning entry explaining the assignment decision.
 
 Focus on fixing the validation issues above. Only return the JSON, no additional text.
 """
@@ -384,8 +380,8 @@ Focus on fixing the validation issues above. Only return the JSON, no additional
         Returns (score, issue_breakdown)
         
         Scoring:
-        - Time conflicts: 1000 points each (absolutely critical)
-        - Capability mismatches: 1000 points each (absolutely critical)
+        - Time conflicts: 10000 points each (absolutely critical)
+        - Capability mismatches: 5000 points each (absolutely critical)
         - Capacity violations: 500 points each (very important)
         - Resource waste: 100 points each (important)
         - Region mismatches: 10 points each (nice to have)
@@ -393,8 +389,8 @@ Focus on fixing the validation issues above. Only return the JSON, no additional
         categories = self.categorize_validation_issues(validation_issues)
         
         score = (
-            categories['time_conflicts'] * 1000 +
-            categories['capability_mismatches'] * 1000 +
+            categories['time_conflicts'] * 10000 +
+            categories['capability_mismatches'] * 5000 +
             categories['capacity_violations'] * 500 +
             categories['resource_waste'] * 100 +
             categories['region_mismatches'] * 10 +
@@ -402,6 +398,70 @@ Focus on fixing the validation issues above. Only return the JSON, no additional
         )
         
         return score, categories
+    
+    def calculate_actual_metrics(self, allocation: Dict[str, Any]) -> Dict[str, Any]:
+        """Calculate actual metrics from the allocation"""
+        allocations = allocation.get('allocations', {})
+        
+        # Create lookup maps
+        driver_map = {d['driver_id']: d for d in self.drivers}
+        order_map = {o['order_id']: o for o in self.orders}
+        
+        # Track statistics
+        total_allocated = 0
+        wedding_orders_allocated = 0
+        corporate_orders_allocated = 0
+        regular_orders_allocated = 0
+        drivers_used = 0
+        region_matches = 0
+        total_order_assignments = 0
+        wedding_drivers_on_wedding = 0
+        wedding_drivers_on_regular = 0
+        
+        for driver_id, order_ids in allocations.items():
+            if not order_ids:
+                continue
+                
+            drivers_used += 1
+            driver = driver_map.get(driver_id, {})
+            driver_capabilities = driver.get('capabilities', [])
+            driver_region = driver.get('preferred_region')
+            is_wedding_capable = any(cap in ['vip', 'wedding', 'large_events'] for cap in driver_capabilities)
+            
+            for order_id in order_ids:
+                total_allocated += 1
+                order = order_map.get(order_id, {})
+                tags = order.get('tags', [])
+                
+                # Count order types
+                if any(tag in ['vip', 'wedding', 'large_events'] for tag in tags):
+                    wedding_orders_allocated += 1
+                    if is_wedding_capable:
+                        wedding_drivers_on_wedding += 1
+                elif 'corporate' in tags or 'seminars' in tags:
+                    corporate_orders_allocated += 1
+                else:
+                    regular_orders_allocated += 1
+                    if is_wedding_capable:
+                        wedding_drivers_on_regular += 1
+                
+                # Count region matches
+                if order.get('region') == driver_region:
+                    region_matches += 1
+                total_order_assignments += 1
+        
+        return {
+            'total_allocated': total_allocated,
+            'total_unallocated': len(self.orders) - total_allocated,
+            'wedding_orders_allocated': wedding_orders_allocated,
+            'corporate_orders_allocated': corporate_orders_allocated,
+            'regular_orders_allocated': regular_orders_allocated,
+            'drivers_used': drivers_used,
+            'average_orders_per_driver': total_allocated / drivers_used if drivers_used > 0 else 0,
+            'region_match_rate': region_matches / total_order_assignments if total_order_assignments > 0 else 0,
+            'wedding_drivers_on_wedding_orders': wedding_drivers_on_wedding,
+            'wedding_drivers_on_regular_orders': wedding_drivers_on_regular
+        }
     
     def save_attempt(self, attempt_num: int, allocation: Dict[str, Any], 
                     validation_issues: List[str], score: int, 
@@ -411,6 +471,9 @@ Focus on fixing the validation issues above. Only return the JSON, no additional
         filename = f'attempt_{attempt_num:02d}_{timestamp}_score_{score}.json'
         filepath = os.path.join(self.attempts_dir, filename)
         
+        # Calculate actual metrics
+        actual_metrics = self.calculate_actual_metrics(allocation)
+        
         attempt_data = {
             'attempt_number': attempt_num,
             'timestamp': timestamp,
@@ -418,7 +481,8 @@ Focus on fixing the validation issues above. Only return the JSON, no additional
             'issue_breakdown': issue_breakdown,
             'total_issues': len(validation_issues),
             'validation_issues': validation_issues,
-            'allocation': allocation
+            'allocation': allocation,
+            'actual_metrics': actual_metrics
         }
         
         with open(filepath, 'w') as f:
@@ -505,12 +569,12 @@ Focus on fixing the validation issues above. Only return the JSON, no additional
                 
                 # Request correction
                 response = self.client.chat.completions.create(
-                    model="gpt-4o",
+                    model="gpt-4.1",
                     messages=[
                         {"role": "system", "content": "You are an expert logistics optimizer. Always respond with valid JSON only."},
                         {"role": "user", "content": correction_prompt}
                     ],
-                    temperature=0.1,
+                    temperature=0.3,
                     response_format={"type": "json_object"}
                 )
                 
@@ -700,20 +764,23 @@ Focus on fixing the validation issues above. Only return the JSON, no additional
             if driver['driver_id'] not in allocations_dict or len(allocations_dict[driver['driver_id']]) == 0:
                 unused_drivers.append(driver.copy())
         
+        # Calculate actual metrics
+        actual_metrics = self.calculate_actual_metrics(allocation)
+        
         # Complete output
         complete_output = {
             "allocations": complete_allocations,
             "unallocated_orders": unallocated_orders,
             "unused_drivers": unused_drivers,
-            "metrics": allocation.get('metrics', {}),
+            "metrics": actual_metrics,
             "warnings": allocation.get('warnings', []),
             "summary": {
                 "total_drivers": len(self.drivers),
-                "drivers_used": len([d for d in allocations_dict.values() if len(d) > 0]),
+                "drivers_used": actual_metrics['drivers_used'],
                 "drivers_unused": len(unused_drivers),
                 "total_orders": len(self.orders),
-                "orders_allocated": len(allocated_order_ids),
-                "orders_unallocated": len(unallocated_orders)
+                "orders_allocated": actual_metrics['total_allocated'],
+                "orders_unallocated": actual_metrics['total_unallocated']
             }
         }
         
@@ -725,8 +792,9 @@ Focus on fixing the validation issues above. Only return the JSON, no additional
         print("📋 ALLOCATION RESULTS")
         print("="*80)
         
-        # Metrics
-        metrics = allocation.get('metrics', {})
+        # Calculate actual metrics
+        metrics = self.calculate_actual_metrics(allocation)
+        
         print(f"\n📊 METRICS:")
         print(f"   Total Allocated: {metrics.get('total_allocated', 0)}/{len(self.orders)} orders")
         print(f"   Unallocated: {metrics.get('total_unallocated', 0)} orders")

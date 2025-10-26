@@ -5,9 +5,12 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "folium>=0.20.0",
     "ipykernel>=7.0.1",
     "openai>=2.6.1",
     "pandas>=2.3.3",
     "pulp>=3.3.0",
     "python-dotenv>=1.1.1",
+    "streamlit>=1.50.0",
+    "streamlit-folium>=0.25.3",
 ]
