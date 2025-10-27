@@ -1,23 +1,18 @@
 # grain-project
 
+<a id="readme-top"></a>
+
+
 ## Table of Contents
-- [About the Project](#about-the-project)
 - [The Challenge: “Smart Delivery Allocator”](#the-challenge-smart-delivery-allocator)
 - [Context](#context)
 - [Built With](#built-with)
-- [Getting Started](#getting-started)
-  - [Installation](#installation)
+- [Installation](#installation)
 - [Usage](#usage)
+- [Developer's Guide](#developers-guide)
+- [Known Bugs](#known-bugs)
 - [Roadmap](#roadmap)
-- [License](#license)
 - [Contact](#contact)
-- [Acknowledgement](#acknowledgement)
-
----
-
-## About the Project
-
-This project is a proof-of-concept AI-powered delivery allocation system designed to intelligently assign catering orders to delivery specialists, optimizing based on constraints, priorities, and logistics.
 
 ---
 
@@ -38,44 +33,83 @@ You’re building an internal tool for a catering company (think Grain) that del
 
 Your task is to create a proof-of-concept that demonstrates how AI can make smart initial allocations, saving hours of manual work and improving logistics efficiency.
 
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
 ---
 
 ## Built With
 
 - [Streamlit](https://streamlit.io/)
+- Folium
 - Python
 
 ---
 
-## Getting Started
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-### Installation
+## Installation (on Mac)
 
 ```bash
+git clone https://github.com/yeo-menghan/grain-project.git
+cd grain-project
 uv init
 uv sync
 uv pip install -r requirements.txt
+source .venv/bin/activate
 ```
 
 Create a new folder named ./data/.
 Add drivers.json and orders.json files under this new folder.
 
-
-Running the backend
-
-```
-python allocator_repeat.py
-```
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## Usage
 
+Run the scheduling algorithm
+```
+python -m allocator.main
+```
+![backend](./images/backend-demo.gif)
+
+The scheduling algorithm will produce a `allocation_results.json` under `./data/`. Thereafter, we can observe the allocation details via:
+```
+streamlit run frontend.py
+```
+![frontend](./images/frontend-demo.gif)
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
 ## Developer's Guide
+
+LLM usage: GPT-4.1
+Also tested on GPT-4.1-mini but yielded sub-optimal results
+
+### Flowchart of allocation algorithm
+![flowchart](./images/backend-flowchart.png)
+
+### Class diagram of allocation algorithm
+
+![class-diagram](./images/backend-class.png)
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+## Known Bugs
+- [ ] Suboptimal Openai API Model performance at night with same prompts and set-up (scheduling wrongly, wrong formatting, hallucinating of drivers and orders) 
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## Roadmap
 
-## License
+- [x] First MVP (allocator-repeat.py)
+- [x] MVP with token tracking and OOP
+- [ ] Further test on other LLMs
+- [ ] Benchmark against traditional scheduling algorithms - Greedy, PuLP
+- [ ] Add more guardrails
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## Contact
 
-## Acknowledgement
+* Contact Meng Han via email: yeomenghan1989@gmail.com for any bug reports or extensions for the project
+
 

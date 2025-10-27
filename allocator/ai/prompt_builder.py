@@ -245,11 +245,12 @@ ALLOCATION PRIORITY:
 4. Only use wedding-capable drivers for regular orders if all wedding orders are allocated
 
 CRITICAL RULES (MUST FOLLOW):
-- Orders with 'vip', 'wedding', or 'large_events' tags MUST go to wedding-capable drivers
+- Orders with 'wedding' tags MUST go to wedding-capable drivers
 - NO time conflicts allowed
 - Never exceed driver max_orders_per_day
 - Minimize waste of wedding-capable driver capacity
 - Maintain or improve region match rate
+- Number of orders assigned should not exceed original number of orders (i.e. it should not be 66 assigned orders if there's only 60 orders to begin with)
 
 RESPONSE FORMAT:
 Return a corrected allocation in the same JSON format:

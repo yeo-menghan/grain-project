@@ -12,6 +12,7 @@ dependencies = [
     "pandas>=2.3.3",
     "pulp>=3.3.0",
     "python-dotenv>=1.1.1",
+    "python-multipart>=0.0.20",
     "streamlit>=1.50.0",
     "streamlit-folium>=0.25.3",
     "uvicorn>=0.38.0",

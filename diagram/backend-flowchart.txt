@@ -1,0 +1,42 @@
+---
+config:
+      theme: redux
+---
+flowchart TD
+    Start([Start Main]) --> LoadData[DataLoader.load_drivers_and_orders]
+    LoadData --> ParseDrivers[Parse Drivers JSON]
+    LoadData --> ParseOrders[Parse Orders JSON]
+    
+    ParseDrivers --> CreateEngine[Initialize AllocationEngine]
+    ParseOrders --> CreateEngine
+    
+    CreateEngine --> RunAllocation[engine.allocate with MAX_RETRIES]
+    
+    RunAllocation --> AttemptLoop{For each attempt}
+    AttemptLoop --> GenerateAllocation[Generate Allocation]
+    GenerateAllocation --> ValidateAllocation[AllocationValidator.validate]
+    ValidateAllocation --> SaveAttempt[Save Attempt to JSON]
+    SaveAttempt --> CheckBest{Is Best Attempt?}
+    CheckBest -->|Yes| UpdateBest[Update best_allocation]
+    CheckBest -->|No| NextAttempt
+    UpdateBest --> NextAttempt{More Retries?}
+    NextAttempt -->|Yes| AttemptLoop
+    NextAttempt -->|No| FinalValidation
+    
+    FinalValidation[Final Validation on Best] --> CalcMetrics[MetricsCalculator.calculate]
+    CalcMetrics --> FormatOutput[OutputFormatter.print_results]
+    
+    FormatOutput --> PrintMetrics[Print Metrics]
+    FormatOutput --> PrintValidation[Print Validation Breakdown]
+    FormatOutput --> PrintAllocations[Print Driver Assignments]
+    FormatOutput --> PrintWarnings[Print Warnings]
+    
+    PrintWarnings --> BuildOutput[Build Complete Output]
+    BuildOutput --> SaveResults[ResultSaver.save_final_results]
+    SaveResults --> End([End])
+    
+    style Start fill:#e1f5e1
+    style End fill:#ffe1e1
+    style RunAllocation fill:#fff4e1
+    style ValidateAllocation fill:#e1f0ff
+    style SaveResults fill:#f0e1ff

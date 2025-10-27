@@ -1,0 +1,82 @@
+---
+config:
+      theme: redux
+---
+classDiagram
+    class Main {
+        +main()
+    }
+    
+    class DataLoader {
+        +load_drivers_and_orders(drivers_file, orders_file)
+        -_load_json(file_path)
+    }
+    
+    class AllocationEngine {
+        -drivers: List~Driver~
+        -orders: List~Order~
+        +allocate(max_retries)
+        +build_complete_output(allocation)
+        -_generate_allocation()
+    }
+    
+    class AllocationValidator {
+        -drivers: List~Driver~
+        -orders: List~Order~
+        +validate(allocation)
+        -_check_time_conflicts()
+        -_check_capabilities()
+        -_check_capacity()
+    }
+    
+    class MetricsCalculator {
+        +calculate(allocation, drivers, orders)
+        -_count_order_types()
+        -_calculate_utilization()
+    }
+    
+    class ResultSaver {
+        -attempts_dir: Path
+        +save_final_results(output, filepath)
+        +save_attempt(allocation, attempt_num)
+    }
+    
+    class OutputFormatter {
+        +print_results(allocation, issues, drivers_count, orders_count, metrics)
+        -_print_metrics()
+        -_print_allocations()
+        -_print_warnings()
+    }
+    
+    class Driver {
+        +driver_id: str
+        +name: str
+        +max_orders_per_day: int
+        +preferred_region: str
+        +capabilities: List~str~
+        +is_wedding_capable: bool
+    }
+    
+    class Order {
+        +order_id: str
+        +region: str
+        +pickup_time: datetime
+        +teardown_time: datetime
+        +pax_count: int
+        +tags: List~str~
+        +is_wedding_order: bool
+    }
+    
+    Main --> DataLoader : uses
+    Main --> AllocationEngine : creates
+    Main --> AllocationValidator : uses
+    Main --> MetricsCalculator : uses
+    Main --> ResultSaver : uses
+    Main --> OutputFormatter : uses
+    
+    AllocationEngine --> Driver : processes
+    AllocationEngine --> Order : processes
+    AllocationValidator --> Driver : validates against
+    AllocationValidator --> Order : validates against
+    DataLoader --> Driver : creates
+    DataLoader --> Order : creates

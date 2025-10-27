@@ -42,5 +42,5 @@ TRACK_TOKEN_USAGE = True
 
 # Pricing
 # GPT-4 Turbo pricing per 1M tokens
-PRICE_PER_1M_INPUT_TOKENS = 10.00  # USD$10 per 1M input tokens
-PRICE_PER_1M_OUTPUT_TOKENS = 30.00  # USD$30 per 1M output tokens
+PRICE_PER_1M_INPUT_TOKENS = 2.00
+PRICE_PER_1M_OUTPUT_TOKENS = 8.00
