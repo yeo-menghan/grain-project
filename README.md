@@ -81,8 +81,8 @@ streamlit run frontend.py
 
 ## Developer's Guide
 
-LLM usage: GPT-4.1
-Also tested on GPT-4.1-mini but yielded sub-optimal results
+* LLM usage: GPT-4.1
+* Also tested on GPT-4.1-mini but yielded sub-optimal results
 
 ### Flowchart of allocation algorithm
 ![flowchart](./images/backend-flowchart.png)
