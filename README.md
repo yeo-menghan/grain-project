@@ -2,7 +2,6 @@
 
 <a id="readme-top"></a>
 
-
 ## Table of Contents
 - [The Challenge: “Smart Delivery Allocator”](#the-challenge-smart-delivery-allocator)
 - [Context](#context)
@@ -24,14 +23,14 @@ Build a working prototype of an AI-powered delivery allocation system that intel
 
 ## Context
 
-You’re building an internal tool for a catering company (think Grain) that delivers hundreds of orders daily. The operations team currently spends hours manually assigning orders to drivers, trying to balance:
+Building an internal tool for a catering company (think Grain) that delivers hundreds of orders daily. The operations team currently spends hours manually assigning orders to drivers, trying to balance:
 
 - **Geographic efficiency:** clustering orders by region
 - **Time windows:** pickup, setup, teardown constraints
 - **Driver preferences and capacity:** regional familiarity, max orders per day
 - **Order priorities:** VIP clients, special requirements like pre-setup or weddings
 
-Your task is to create a proof-of-concept that demonstrates how AI can make smart initial allocations, saving hours of manual work and improving logistics efficiency.
+The task is to create a proof-of-concept that demonstrates how AI can make smart initial allocations, saving hours of manual work and improving logistics efficiency.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -58,8 +57,8 @@ uv pip install -r requirements.txt
 source .venv/bin/activate
 ```
 
-Create a new folder named ./data/.
-Add drivers.json and orders.json files under this new folder.
+Create a new folder named `./data/`.
+Add `drivers.json` and `orders.json` files under this new folder.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -83,13 +82,14 @@ streamlit run frontend.py
 
 * LLM usage: GPT-4.1
 * Also tested on GPT-4.1-mini but yielded sub-optimal results
+* Refer to OpenAI's API pricing for other models: [link](https://platform.openai.com/docs/pricing?latest-pricing=standard)
 
 ### Flowchart of allocation algorithm
-![flowchart](./images/backend-flowchart.png)
+![flowchart](./images/backend-flowchart.drawio.png)
 
 ### Class diagram of allocation algorithm
 
-![class-diagram](./images/backend-class.png)
+![class-diagram](./images/backend-class.drawio.png)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
