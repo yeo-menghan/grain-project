@@ -132,6 +132,10 @@ allocator_repeat.py (monolithic mvp)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
+### YouTube Video for quick run down
+Accessible through this link: [youtube link](https://youtu.be/EpLn-z_R7UI)
+
+
 ## Known Bugs
 - [ ] Suboptimal Openai API Model performance at night with same prompts and set-up (scheduling wrongly, wrong formatting, hallucinating of drivers and orders) 
 
