@@ -1,5 +1,10 @@
 # grain-project
 
+![cover](./images/og-image.jpg)
+
+![Contributors](https://img.shields.io/github/contributors/yeo-menghan/grain-project?color=dark-green) ![Issues](https://img.shields.io/github/issues/yeo-menghan/grain-project) ![License](https://img.shields.io/github/license/yeo-menghan/grain-project)
+
+
 <a id="readme-top"></a>
 
 ## Table of Contents
@@ -48,17 +53,21 @@ The task is to create a proof-of-concept that demonstrates how AI can make smart
 
 ## Installation (on Mac)
 
+1. Clone & Set up virtual environment
 ```bash
 git clone https://github.com/yeo-menghan/grain-project.git
 cd grain-project
 uv init
 uv sync
-uv pip install -r requirements.txt
 source .venv/bin/activate
+uv pip install -r requirements.txt
 ```
 
+2. Set up data folder
 Create a new folder named `./data/`.
 Add `drivers.json` and `orders.json` files under this new folder.
+
+3. rename `sample.env` to `.env` and insert OpenAI api key
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -83,6 +92,36 @@ streamlit run frontend.py
 * LLM usage: GPT-4.1
 * Also tested on GPT-4.1-mini but yielded sub-optimal results
 * Refer to OpenAI's API pricing for other models: [link](https://platform.openai.com/docs/pricing?latest-pricing=standard)
+
+### Project Directory (Allocator)
+```bash
+allocator/
+├── ai/
+│ ├── init.py
+│ ├── openai_client.py
+│ └── token_tracker.py
+├── allocation/
+│ ├── init.py
+│ ├── allocator.py
+│ └── validator.py
+├── analysis/
+│ ├── init.py
+│ └── analyzer.py
+├── io/
+│ ├── init.py
+│ ├── loader.py
+│ └── saver.py
+└── models/
+├── init.py
+├── config.py
+├── driver.py
+├── order.py
+├── main.py
+└── utils.py
+data/
+frontend.py
+allocator_repeat.py (monolithic mvp)
+```
 
 ### Flowchart of allocation algorithm
 ![flowchart](./images/backend-flowchart.drawio.png)
@@ -112,4 +151,5 @@ streamlit run frontend.py
 
 * Contact Meng Han via email: yeomenghan1989@gmail.com for any bug reports or extensions for the project
 
-
+## Acknowledgement
+Project image taken from [Grain](https://www.google.com/url?sa=i&url=https%3A%2F%2Fgrain.com.sg%2F&psig=AOvVaw0DpnI2Vy9L2Vmlt7I3atCE&ust=1761699684117000&source=images&cd=vfe&opi=89978449&ved=0CBUQjRxqFwoTCICb5PDYxZADFQAAAAAdAAAAABAE)
